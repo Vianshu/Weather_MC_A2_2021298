@@ -223,7 +223,7 @@ class MainActivity : ComponentActivity() {
                     color = Color.White)
             }
 
-            Spacer(modifier = Modifier.width(16.dp)) // Add space between the boxes
+            Spacer(modifier = Modifier.width(16.dp))
 
             Box(
                 modifier = Modifier
