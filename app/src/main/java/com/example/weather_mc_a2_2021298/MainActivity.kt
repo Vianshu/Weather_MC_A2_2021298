@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
         val repo = WRepo.get()
         var datasuccess = false
         val currentDate = LocalDate.now()
-        var init_t = Temp(0.0,0.0)
+
         Ckneto=cknetobs(applicationContext)
         Ckneto.observe().onEach{
             println("Status is $it")
@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    bgscreen(repo = repo, intemp = init_t)
+                    bgscreen(repo = repo)
                 }
             }
         }
@@ -141,13 +141,14 @@ class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
-    private fun bgscreen(repo: WRepo, intemp:Temp) {
+    private fun bgscreen(repo: WRepo) {
         val coroutineScope = rememberCoroutineScope()
         val status by Ckneto.observe().collectAsState(Cknet.Status.Unavailable)
         var st by remember { mutableStateOf(false) }
         if(status==Cknet.Status.Available){
            LaunchedEffect(Unit) {
                 downloadData(currentDate = LocalDate.now(),repo=repo)
+
                 st = true
 
             }
@@ -180,7 +181,7 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
                     "Berlin, Germany",
-                    modifier = Modifier.padding(top = 80.dp),
+                    modifier = Modifier.padding(top = 40.dp),
                     color = Color.White,
                     fontSize = 25.sp,
                     fontFamily = FontFamily.SansSerif,
@@ -188,9 +189,9 @@ class MainActivity : ComponentActivity() {
                     letterSpacing = 1.sp,
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(50.dp))
+                Spacer(modifier = Modifier.height(30.dp))
 
-                TakeInput(repo = repo,intemp,st)
+                TakeInput(repo = repo, st)
             }
         }
     }
@@ -212,7 +213,8 @@ class MainActivity : ComponentActivity() {
                     .padding(10.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("MIN \n ${t.min}°C",
+
+                Text("MIN \n${String.format("%.1f", t.min)}°C",
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 20.dp),
@@ -233,7 +235,7 @@ class MainActivity : ComponentActivity() {
                     .padding(10.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("MAX  \n ${t.max}°C",
+                Text("MAX  \n ${String.format("%.1f", t.max)}°C",
 
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -350,13 +352,15 @@ class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
-    fun TakeInput(repo: WRepo,init_t:Temp,st:Boolean) {
-        var inputValue by remember { mutableStateOf("2021-01-01") }
+    fun TakeInput(repo: WRepo,st:Boolean) {
         var weatherData by remember { mutableStateOf<Weather?>(null) }
-        var weatherS by remember { mutableStateOf<Temp?>(init_t) }
+        var weatherS by remember { mutableStateOf(Temp(0.0,0.0)) }
         val coroutineScope = rememberCoroutineScope()
         val currentDate = LocalDate.now()
-
+        var inputValue by remember { mutableStateOf(currentDate.toString()) }
+        LaunchedEffect(Unit) {
+            weatherS =repo.getfuturetemp(inputValue)
+        }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(16.dp)
@@ -375,7 +379,7 @@ class MainActivity : ComponentActivity() {
                         coroutineScope.launch {
                             try {
                                 Log.d("TRYING_IV", " ---> INPUT DATE : ${inputValue.toString()}")
-                                if (inputValue > currentDate.toString()) {
+                                if (inputValue >= currentDate.toString()) {
                                     weatherS = repo.getfuturetemp(inputValue)
                                     Log.d("SQL_RET", "FUTURE : Response successful from SQL $weatherS")
                                 } else {

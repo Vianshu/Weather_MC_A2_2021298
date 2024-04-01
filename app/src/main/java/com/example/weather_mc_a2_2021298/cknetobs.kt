@@ -20,8 +20,6 @@ class cknetobs(private val context: Context):Cknet{
                 override fun onAvailable(network: Network) {
                     super.onAvailable(network)
                     launch { send(Cknet.Status.Available) }
-
-
                 }
 
                 override fun onLosing(network: Network, maxMsToLive: Int) {
