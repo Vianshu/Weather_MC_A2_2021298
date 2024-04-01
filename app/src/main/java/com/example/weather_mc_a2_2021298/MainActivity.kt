@@ -26,6 +26,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,22 +43,39 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import com.example.myapplication.Model.Weather
 import com.example.myapplication.RestAPIInstance
 import com.example.myapplication.Temp
 import com.example.myapplication.Wt_DB
 import com.example.myapplication.data
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import okhttp3.internal.wait
 
 class MainActivity : ComponentActivity() {
+    private lateinit var Ckneto:Cknet
+
     @OptIn(DelicateCoroutinesApi::class)
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,62 +84,74 @@ class MainActivity : ComponentActivity() {
         val repo = WRepo.get()
         var datasuccess = false
         val currentDate = LocalDate.now()
-        GlobalScope.launch {
-            try {
-                Log.d("TRYING_IV", " ---> TRYING TO GET DATA 2021 2024-03-20 , ${currentDate.minusDays(2).toString()}")
-//                Change the sd parameter , to add more history data till 1950 , due to large amount of data , i have added from 2000.
-                val response = getAsyncData("2000-01-01", currentDate.minusDays(2).toString())
+        var init_t = Temp(0.0,0.0)
+        Ckneto=cknetobs(applicationContext)
+        Ckneto.observe().onEach{
+            println("Status is $it")
+        }.launchIn(lifecycleScope)
 
-                val last2 = RestAPIInstance.apil2.getl2(
-                    "52.52",
-                    "13.41",
-                    "2",
-                    "temperature_2m"
-                )
-                val url = last2.raw().request.url.toString()
-                Log.d("API_URL", url)
-
-                Log.d("TRYING_", "SUCCESS ${last2.body()}")
-
-                if (last2 != null) {
-                    last2.body()?.let { SaveData(response, it,repo) }
-                }
-                datasuccess = true
-                val inputValue=currentDate.toString()
-//                var weatherS by remember { mutableStateOf<Temp?>(null) }
-                if(datasuccess){
-                        try {
-                            Log.d("TRYING_IV", " ---> INPUT DATE : ${inputValue.toString()}")
-//                            ShowData(w = repo.gethist(inputValue))
-//                            Log.d("SQL_RET", "PAST : Response successful from SQL $weatherS")
-
-                        } catch (e: Exception) {
-                            Log.d("ERROR_", e.toString())
-                    }
-                }
-                Log.d("TRYING_", "SUCCESS ")
-            } catch (e: Exception) {
-                Log.d("ERROR_GETTING DATA", e.toString())
-            }
-        }
         setContent {
             Weather_MC_A2_2021298Theme {
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Text("BERLIN, GERMANY")
-                    bgscreen(repo = repo)
+                    bgscreen(repo = repo, intemp = init_t)
                 }
             }
         }
+
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun downloadData(currentDate: LocalDate, repo: WRepo):Boolean {
+        var datasuccess = false
+        try {
+            Log.d(
+                "TRYING_IV",
+                " ---> TRYING TO GET DATA 2021 2024-03-20 , ${currentDate.minusDays(2).toString()}"
+            )
+            val response = getAsyncData("2000-01-01", currentDate.minusDays(2).toString())
+            val last2 = RestAPIInstance.apil2.getl2("52.52", "13.41", "2", "temperature_2m")
+            val url = last2.raw().request.url.toString()
+            Log.d("API_URL", url)
+            Log.d("TRYING_", "SUCCESS ${last2.body()}")
+            last2.body()?.let { SaveData(response, it, repo) }
+            if (last2.isSuccessful && response.hourly.time.isNotEmpty()) {
+                datasuccess = true
+                Log.d("TRYING_", "SUCCESS ${datasuccess}")
+            }
+            val inputValue = currentDate.toString()
+            if (datasuccess) {
+                try {
+                    Log.d("TRYING_IV", " ---> INPUT DATE : ${inputValue.toString()}")
+                    // Perform other actions with the downloaded data
+                } catch (e: Exception) {
+                    Log.d("ERROR_", e.toString())
+                }
+            }
+            Log.d("TRYING_", "SUCCESS ")
+        } catch (e: Exception) {
+            Log.d("ERROR_GETTING DATA", e.toString())
+        }
+        return datasuccess
+    }
 
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
-    private fun bgscreen(repo: WRepo) {
+    private fun bgscreen(repo: WRepo, intemp:Temp) {
+        val coroutineScope = rememberCoroutineScope()
+        val status by Ckneto.observe().collectAsState(Cknet.Status.Unavailable)
+        var st by remember { mutableStateOf(false) }
+        if(status==Cknet.Status.Available){
+           LaunchedEffect(Unit) {
+                downloadData(currentDate = LocalDate.now(),repo=repo)
+                st = true
+
+            }
+        }
         Box(modifier = Modifier.fillMaxSize()) {
             Image(
                 painter = painterResource(id = R.drawable.chk2),
@@ -128,34 +159,42 @@ class MainActivity : ComponentActivity() {
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.matchParentSize()
             )
-            Text(
-                "Berlin, Germany",  //to change country enter corresponding longitude and latitude
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 20.dp),
-                color = Color.White,
-                fontSize = 24.sp,
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
 
-            Spacer(modifier = Modifier.height(54.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Download Status: $st",
+                    modifier = Modifier.padding(top = 40.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    letterSpacing = 1.sp,
+                    textAlign = TextAlign.Justify)
+                Text("Network Status: $status",
+                    modifier = Modifier.padding(top = 40.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    letterSpacing = 1.sp,
+                    textAlign = TextAlign.Justify)
 
-            TakeInput(repo = repo)
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    "Berlin, Germany",
+                    modifier = Modifier.padding(top = 80.dp),
+                    color = Color.White,
+                    fontSize = 25.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(50.dp))
 
+                TakeInput(repo = repo,intemp,st)
+            }
         }
     }
 
-
-
-    @Composable
-    private fun ShowData(w: Weather) {
-        val wmax = w.hourly.temperature_2m.max()
-        val wmin = w.hourly.temperature_2m.min()
-        Log.d("DSS_","max:$wmax   min:$wmin ${w.hourly.temperature_2m.size}")
-        Text("Max Temperature : $wmax °C\n Min Temperature : $wmin °C")
-    }
 
     @Composable
     private fun show(t: Temp) {
@@ -173,13 +212,13 @@ class MainActivity : ComponentActivity() {
                     .padding(10.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("MIN \n  ${t.min}",
+                Text("MIN \n ${t.min}°C",
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 20.dp),
                     fontSize = 24.sp,
                     fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Light,
+                    fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.sp,
                     color = Color.White)
             }
@@ -194,14 +233,14 @@ class MainActivity : ComponentActivity() {
                     .padding(10.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("MAX  \n ${t.max}",
+                Text("MAX  \n ${t.max}°C",
 
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 20.dp),
                     fontSize = 24.sp,
                     fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Light,
+                    fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 1.sp,
                     color = Color.White)
             }
@@ -255,7 +294,7 @@ class MainActivity : ComponentActivity() {
     ) {
         var textValue by remember { mutableStateOf(value) }
         var isError by remember { mutableStateOf(false) }
-
+        var isold by remember { mutableStateOf(false) }
         OutlinedTextField(
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
@@ -264,7 +303,6 @@ class MainActivity : ComponentActivity() {
             ),
             value = textValue,
             onValueChange = { newValue ->
-
                 if (newValue.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
                     val parts = newValue.split("-")
                     val year = parts[0].toInt()
@@ -285,7 +323,6 @@ class MainActivity : ComponentActivity() {
                         }
                         else -> false
                     }
-
                     isError = !(validYear && validMonth && validDay)
                 } else {
                     isError = true
@@ -313,49 +350,49 @@ class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
-    fun TakeInput(repo: WRepo) {
+    fun TakeInput(repo: WRepo,init_t:Temp,st:Boolean) {
         var inputValue by remember { mutableStateOf("2021-01-01") }
         var weatherData by remember { mutableStateOf<Weather?>(null) }
-        var weatherS by remember { mutableStateOf<Temp?>(null) }
+        var weatherS by remember { mutableStateOf<Temp?>(init_t) }
         val coroutineScope = rememberCoroutineScope()
         val currentDate = LocalDate.now()
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
 //            verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(16.dp)
         ) {
+
             weatherS?.let { show(t = weatherS!!) }
             InputDate(
                 value = inputValue,
                 onValueChange = { inputValue = it }
             )
-
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    coroutineScope.launch {
-                        try {
-                            Log.d("TRYING_IV", " ---> INPUT DATE : ${inputValue.toString()}")
-                            if (inputValue > currentDate.toString()) {
-                                weatherS = repo.getfuturetemp(inputValue)
-                                Log.d("SQL_RET", "FUTURE : Response successful from SQL $weatherS")
-                            } else {
-                                weatherS = repo.gethist(inputValue)
-                                Log.d("SQL_RET", "PAST : Response successful from SQL $weatherS")
+                    if(st)
+                    {
+                        coroutineScope.launch {
+                            try {
+                                Log.d("TRYING_IV", " ---> INPUT DATE : ${inputValue.toString()}")
+                                if (inputValue > currentDate.toString()) {
+                                    weatherS = repo.getfuturetemp(inputValue)
+                                    Log.d("SQL_RET", "FUTURE : Response successful from SQL $weatherS")
+                                } else {
+                                    weatherS = repo.gethist(inputValue)
+                                    Log.d("SQL_RET", "PAST : Response successful from SQL $weatherS")
+                                }
+                            } catch (e: Exception) {
+                                Log.d("ERROR_", e.toString())
                             }
-                        } catch (e: Exception) {
-                            Log.d("ERROR_", e.toString())
                         }
                     }
-                },
-//                modifier = Modifier.fillMaxWidth()
+                }
             ) {
                 Text(text = "GET DATA")
             }
 
-//            if (datasuccess) {
-//                Text("DATA SAVED")
-//            }
         }
     }
 
@@ -390,7 +427,7 @@ class MainActivity : ComponentActivity() {
 
         suspend fun insertData(date: String, min: Double?, max: Double?) {
             val newData =
-                data(0, date, min, max) // Assuming uid is auto-generated and starts from 0
+                data(0, date, min, max)
             database.WDao().insertAll(newData)
         }
 

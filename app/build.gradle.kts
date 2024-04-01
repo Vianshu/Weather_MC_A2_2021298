@@ -10,6 +10,8 @@ android {
     compileSdk = 34
 
 
+
+
     room {
         schemaDirectory("$projectDir/schemas")
     }
@@ -56,6 +58,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.lifecycle.livedata.ktx)
     val roomver = "2.6.1"
 
     implementation("androidx.room:room-runtime:$roomver")

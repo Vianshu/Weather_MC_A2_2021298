@@ -29,6 +29,8 @@ interface wthrDao {
     @Query("SELECT * FROM data")
     suspend fun getAll(): List<data>
 
+
+
     @Query("SELECT \n" +
             "    AVG(min) AS min,\n" +
             "    AVG(max) AS max\n" +
