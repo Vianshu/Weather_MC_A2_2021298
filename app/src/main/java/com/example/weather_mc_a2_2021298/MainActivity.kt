@@ -290,7 +290,7 @@ class MainActivity : ComponentActivity() {
     fun InputDate(
         value: String,
         onValueChange: (String) -> Unit,
-        textColor: Color = Color.White // Default text color is white
+        textColor: Color = Color.White
     ) {
         var textValue by remember { mutableStateOf(value) }
         var isError by remember { mutableStateOf(false) }
@@ -359,7 +359,6 @@ class MainActivity : ComponentActivity() {
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-//            verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(16.dp)
         ) {
 
