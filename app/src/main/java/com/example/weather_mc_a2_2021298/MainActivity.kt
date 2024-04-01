@@ -82,8 +82,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WRepo.initialize(this)
         val repo = WRepo.get()
-        var datasuccess = false
-        val currentDate = LocalDate.now()
 
         Ckneto=cknetobs(applicationContext)
         Ckneto.observe().onEach{
